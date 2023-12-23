@@ -13,7 +13,6 @@ def run_camera():
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         out.write(frame)
         cv2.imshow('frame', frame)
-        # save image in a specific folder
         cv2.imwrite("images/" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + '.jpg', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
