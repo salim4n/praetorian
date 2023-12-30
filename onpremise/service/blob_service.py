@@ -1,16 +1,15 @@
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from azure.storage.blob import BlobServiceClient
 
 def upload_blob(data, filename):
     try:
-        blob_service_client = BlobServiceClient.from_connection_string("<connection_string>")
-        blob_client = blob_service_client.get_blob_client("https://storageformyapp.blob.core.windows.net/praetoriandetection")
-
+        # Connect to the Azure storage account
+        connect_str = "DefaultEndpointsProtocol=https;AccountName=praetorianblob;AccountKey=PEv0rg+hl5Y2j4I52M6eddkBVK/1JghLJj95PfBtqC8F/T3bjKgfTwxxi6kGGPIvonrSLvvkI9Vc+AStNfJI6w==;EndpointSuffix=core.windows.net"
+        blob_client = BlobServiceClient.from_connection_string(connect_str)
         print("\nUploading to Azure Storage as blob:\n\t" + filename)
-
         # Upload the created file
-        with open(filename, "rb") as data:
-            blob_client.upload_blob(data)
-
+        blob_client = blob_client.get_blob_client(container="onpremvideo", blob=filename)
+        blob_client.upload_blob(data)
+            
     except Exception as ex:
         print('Exception:')
         print(ex)
