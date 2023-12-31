@@ -1,0 +1,6 @@
+# Fichiers d'environnement
+.env
+# Fichiers compilés Python
+*.pyc
+# Répertoire __pycache__
+__pycache__

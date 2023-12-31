@@ -1,3 +1,4 @@
+from io import BytesIO
 import torch
 import numpy as np
 import cv2
@@ -6,9 +7,10 @@ import supervision as sv
 from ultralytics import RTDETR
 import os
 from azure.storage.blob import BlobServiceClient
+from dotenv import load_dotenv
 
-connection_string = "DefaultEndpointsProtocol=https;AccountName=praetorianblob;AccountKey=PEv0rg+hl5Y2j4I52M6eddkBVK/1JghLJj95PfBtqC8F/T3bjKgfTwxxi6kGGPIvonrSLvvkI9Vc+AStNfJI6w==;EndpointSuffix=core.windows.net"
-
+load_dotenv()
+azure_blob_account = os.getenv("AZURE_BLOB_ACCOUNT")
 
 class DETRClass:
     def __init__(self, capture_index, detection_interval, output_folder):
@@ -27,8 +29,15 @@ class DETRClass:
         filename = f"{label}_{time.strftime('%Y%m%d%H%M%S')}.png"
         filepath = os.path.join(self.output_folder, filename)
         cv2.imwrite(filepath, frame)
-        # Passer le contenu de l'image (frame) à la méthode upload_blob
-        self.upload_blob(frame, filename)
+        # Convertir l'image (numpy array) en un objet de flux de données
+        image_data = cv2.imencode('.png', frame)[1].tobytes()
+        image_stream = BytesIO(image_data)
+        connect_str = azure_blob_account
+        blob_client = BlobServiceClient.from_connection_string(connect_str)
+        print("\nUploading to Azure Storage as blob:\n\t" + filename)
+        # Upload le flux de données seulement si la personne est détectée
+        blob_client = blob_client.get_blob_client(container="onprempicture", blob=filename)
+        blob_client.upload_blob(image_stream)
 
     def plot_bboxes(self, results, frame):
         boxes = results[0].boxes.cpu().numpy()
@@ -40,14 +49,22 @@ class DETRClass:
 
         for xyxy, mask, confidence, class_id, track_id in detections:
             label = f"{self.CLASS_NAMES_DICT[class_id]}_{confidence:.2f}"
-            self.save_screenshot(frame, label)
+
+            # Vérifie si la personne est détectée avant d'écrire sur l'image
+            if class_id == 0:
+                # Récupère les coordonnées du coin supérieur gauche de la boîte
+                x, y = int(xyxy[0]), int(xyxy[1])
+                # Ajoute le texte à l'image à l'emplacement de la détection
+                cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                # Enregistre l'image si nécessaire
+                self.save_screenshot(frame, label)
 
         return frame
     
     def upload_video_blob(data, filename):
         try:
             # Connect to the Azure storage account
-            connect_str = connection_string
+            connect_str = azure_blob_account
             blob_client = BlobServiceClient.from_connection_string(connect_str)
             print("\nUploading to Azure Storage as blob:\n\t" + filename)
             # Upload the created file
@@ -60,12 +77,14 @@ class DETRClass:
     def upload_blob(data, filename):
         try:
             # Connect to the Azure storage account
-            connect_str = connection_string
+            connect_str = azure_blob_account
             blob_client = BlobServiceClient.from_connection_string(connect_str)
             print("\nUploading to Azure Storage as blob:\n\t" + filename)
             # Upload the created file
             blob_client = blob_client.get_blob_client(container="onprempicture", blob=filename)
             blob_client.upload_blob(data)
+            #remove image from local storage
+            os.remove(path="onpremise/screenshot/"+filename)
             
         except Exception as ex:
             print('Exception:')
@@ -100,5 +119,5 @@ class DETRClass:
         cap.release()
         cv2.destroyAllWindows()
 
-transformer_detector = DETRClass(0, detection_interval=500, output_folder="onpremise/screenshot")
+transformer_detector = DETRClass(0, detection_interval=100, output_folder="onpremise/screenshot")
 transformer_detector()
