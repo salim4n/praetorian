@@ -38,6 +38,7 @@ class DETRClass:
         # Upload le flux de données seulement si la personne est détectée
         blob_client = blob_client.get_blob_client(container="onprempicture", blob=filename)
         blob_client.upload_blob(image_stream)
+        os.remove(path="onpremise/screenshot/"+filename)
 
     def plot_bboxes(self, results, frame):
         boxes = results[0].boxes.cpu().numpy()

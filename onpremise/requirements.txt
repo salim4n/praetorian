@@ -1,6 +1,7 @@
 opencv-python
 azure-storage-blob
-transformers
 torch
-pytorch-vision
-pytorch
+supervision
+ultralytics
+dotenv
+numpy
