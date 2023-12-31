@@ -23,7 +23,31 @@ class DETRClass:
         self.detection_interval = detection_interval
         self.frame_count = 0
         self.output_folder = output_folder
+        self.filename = f"{time.strftime('%Y%m%d%H%M%S')}.avi"
+        self.filepath = os.path.join("onpremise/video_record", self.filename)
+        self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        self.out = cv2.VideoWriter(self.filepath, self.fourcc, 20.0, (640, 480))
 
+    def video_record(self, frame,isrecording):
+        if isrecording:
+            return
+        else :
+            print("Enregistrement d'une nouvelle vidéo.")
+        self.out.write(frame)
+    
+    def finish_recording(self,frame):
+        self.out.release()
+        # Convertir l'image (numpy array) en un objet de flux de données
+        ret, video_data = cv2.imencode('.jpg', frame)  # Note: .avi is not supported here
+        if not ret:
+            print("Erreur lors de l'encodage de la vidéo.")
+            return
+        video_stream = BytesIO(video_data.tobytes())
+        print("\nUploading to Azure Storage as blob:\n\t" + self.filename)
+        self.upload_video_blob(video_stream, self.filename)
+        print("Suppression du fichier vidéo.")
+        # Supprimer le fichier vidéo après l'avoir téléchargé
+        os.remove(self.filepath)
 
     def save_screenshot(self, frame, label):
         filename = f"{label}_{time.strftime('%Y%m%d%H%M%S')}.png"
@@ -47,10 +71,8 @@ class DETRClass:
         xyxy = boxes.xyxy
         class_id = class_id.astype(np.int32)
         detections = sv.Detections(xyxy=xyxy, class_id=class_id, confidence=conf)
-
         for xyxy, mask, confidence, class_id, track_id in detections:
             label = f"{self.CLASS_NAMES_DICT[class_id]}_{confidence:.2f}"
-
             # Vérifie si la personne est détectée avant d'écrire sur l'image
             if class_id == 0:
                 # Récupère les coordonnées du coin supérieur gauche de la boîte
@@ -75,34 +97,27 @@ class DETRClass:
             print('Exception:')
             print(ex)
 
-    def upload_blob(data, filename):
-        try:
-            # Connect to the Azure storage account
-            connect_str = azure_blob_account
-            blob_client = BlobServiceClient.from_connection_string(connect_str)
-            print("\nUploading to Azure Storage as blob:\n\t" + filename)
-            # Upload the created file
-            blob_client = blob_client.get_blob_client(container="onprempicture", blob=filename)
-            blob_client.upload_blob(data)
-            #remove image from local storage
-            os.remove(path="onpremise/screenshot/"+filename)
-            
-        except Exception as ex:
-            print('Exception:')
-            print(ex)
-
     def __call__(self):
         cap = cv2.VideoCapture(self.capture_index)
         assert cap.isOpened(), f"Failed to open capture {self.capture_index}"
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
+        start_time = time.perf_counter()
+        elapsed_time = time.perf_counter() - start_time
         while cap.isOpened():
-            start_time = time.perf_counter()
             ret, frame = cap.read()
+            # Enregistre la vidéo si nécessaire
+            if elapsed_time > 10:
+                print("dans le if")
+                print(elapsed_time)
+                self.finish_recording(frame)
+                self.video_record(frame,False)
+            else: 
+                print("dans le else")
+                print( elapsed_time)
+                self.video_record(frame,True)
             if ret == False:
                 break
-
             # Detection sur chaque N trames
             if self.frame_count % self.detection_interval == 0:
                 results = self.model.predict(frame)
@@ -114,11 +129,10 @@ class DETRClass:
             cv2.imshow("DETR", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-
             self.frame_count += 1
-
         cap.release()
         cv2.destroyAllWindows()
 
+# Exemple d'utilisation et test
 transformer_detector = DETRClass(0, detection_interval=100, output_folder="onpremise/screenshot")
 transformer_detector()
