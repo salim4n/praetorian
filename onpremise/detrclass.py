@@ -59,7 +59,6 @@ class DETRClass:
 
         return frame
     
-
     def __call__(self):
         cap = cv2.VideoCapture(self.capture_index)
         assert cap.isOpened(), f"Failed to open capture {self.capture_index}"

@@ -1,6 +1,8 @@
 from io import BytesIO
 import os
 import cv2
+from cv2 import VideoWriter
+from cv2 import VideoWriter_fourcc
 import time
 from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient
@@ -11,31 +13,6 @@ azure_blob_account = os.getenv("AZURE_BLOB_ACCOUNT")
 class RecordClass:
     def __init__(self,output_folder):
         self.output_folder = output_folder
-        self.filename = f"{time.strftime('%Y%m%d%H%M%S')}.avi"
-        self.filepath = os.path.join("onpremise/video_record", self.filename)
-        self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        self.out = cv2.VideoWriter(self.filepath, self.fourcc, 20.0, (640, 480))
-    
-    def video_record(self, frame,isrecording):
-        if isrecording:
-            return
-        else :
-            print("Enregistrement d'une nouvelle vidéo.")
-        self.out.write(frame)
-    
-    def finish_recording(self,frame):
-        self.out.release()
-        # Convertir l'image (numpy array) en un objet de flux de données
-        ret, video_data = cv2.imencode('.jpg', frame)  # Note: .avi is not supported here
-        if not ret:
-            print("Erreur lors de l'encodage de la vidéo.")
-            return
-        video_stream = BytesIO(video_data.tobytes())
-        print("\nUploading to Azure Storage as blob:\n\t" + self.filename)
-        self.upload_video_blob(video_stream, self.filename)
-        print("Suppression du fichier vidéo.")
-        # Supprimer le fichier vidéo après l'avoir téléchargé
-        os.remove(self.filepath)
     
     def upload_video_blob(self, video_stream, filename):
         connect_str = azure_blob_account
@@ -45,29 +22,46 @@ class RecordClass:
         print("Vidéo envoyée avec succès.")
 
     def __call__(self):
+        #capture the webcam and save a video each 10 secondes
         cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        start_time = time.perf_counter()
-        ret, frame = cap.read()
-        while cap.isOpened():
-            elapsed_time = time.perf_counter() - start_time
+        frame_width = int(cap.get(3))
+        frame_height = int(cap.get(4))
+        # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
+        out = VideoWriter('onpremise/video_record/outpy.avi', VideoWriter_fourcc('M', 'J', 'P', 'G'), 10, (frame_width, frame_height))
+        # Check if camera opened successfully
+        if (cap.isOpened() == False):
+            print("Unable to read camera feed")
+        frame_count = 0
+        while(True):
             ret, frame = cap.read()
-            # Enregistre la vidéo si nécessaire
-            if elapsed_time > 10:
-                print("dans le if")
-                print(elapsed_time)
-                self.finish_recording(frame)
-                self.video_record(frame,False)
-            else: 
-                print("dans le else")
-                print( elapsed_time)
-                self.video_record(frame,True)
-            if ret == False:
+            if ret == True:
+                # Write the frame into the file 'output.avi'
+                out.write(frame)
+                # Display the resulting frame    
+                cv2.imshow('frame', frame)
+                frame_count += 1
+                # Press Q on keyboard to stop recording
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                # If the number of captured frame is equal to 100, stop recording
+                if frame_count == 100:
+                    break
+            # Break the loop
+            else:
                 break
-        
+        # When everything done, release the video capture and video write objects
         cap.release()
+        out.release()
+        # Closes all the frames
         cv2.destroyAllWindows()
+        # Convertir l'image (numpy array) en un objet de flux de données
+        video_data = open('onpremise/video_record/outpy.avi', 'rb')
+        video_stream = video_data.read()
+        video_data.close()
+        video_stream = BytesIO(video_stream)
+        filename = f"video_{time.strftime('%Y%m%d%H%M%S')}.avi"
+        self.upload_video_blob(video_stream, filename)
+        #os.remove(path="onpremise/video_record/outpy.avi")
     
 # test
 record = RecordClass(output_folder="onpremise/video_record")
