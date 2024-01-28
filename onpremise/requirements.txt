@@ -3,5 +3,5 @@ azure-storage-blob
 torch
 supervision
 ultralytics
-dotenv
+python-dotenv
 numpy
